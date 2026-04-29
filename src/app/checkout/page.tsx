@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Check, CreditCard, ShieldCheck, MapPin, X } from "lucide-react";
@@ -9,15 +9,8 @@ import { useCart } from "../../context/CartContext";
 export default function CheckoutPage() {
   const { cartItems } = useCart();
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
-  const [addresses, setAddresses] = useState([
-    {
-      id: "1",
-      name: "wewe",
-      line1: "fsds, fsdf",
-      line2: "gsd"
-    }
-  ]);
-  const [selectedAddressId, setSelectedAddressId] = useState("1");
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
   const [newAddressForm, setNewAddressForm] = useState({
     street: "",
     city: "",
@@ -26,25 +19,137 @@ export default function CheckoutPage() {
     country: "India",
   });
 
-  const handleSaveAddress = () => {
-    if (!newAddressForm.city) return;
-    
-    const newAddr = {
-      id: Date.now().toString(),
-      name: newAddressForm.city.toLowerCase(),
-      line1: `${newAddressForm.street ? newAddressForm.street + ", " : ""}${newAddressForm.state.toLowerCase()}`,
-      line2: newAddressForm.zip,
+  const [promoCode, setPromoCode] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [promoMessage, setPromoMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      try {
+        const userStr = localStorage.getItem("heedy_user");
+        if (!userStr) return;
+        const { token } = JSON.parse(userStr);
+        if (!token) return;
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const res = await fetch(`${API_URL}/v1/users/addresses`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          const mappedAddresses = data.data.map((addr: any) => ({
+            id: addr._id,
+            name: addr.city?.toLowerCase() || 'Address',
+            line1: `${addr.street ? addr.street + ", " : ""}${addr.state?.toLowerCase() || ''}`,
+            line2: addr.zipCode,
+          }));
+          setAddresses(mappedAddresses);
+          if (mappedAddresses.length > 0) {
+            setSelectedAddressId(mappedAddresses[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch addresses", err);
+      }
     };
+    fetchAddresses();
+  }, []);
+
+  const handleSaveAddress = async () => {
+    if (!newAddressForm.city) return;
+    setIsSavingAddress(true);
     
-    setAddresses([...addresses, newAddr]);
-    setSelectedAddressId(newAddr.id);
-    setIsAddressModalOpen(false);
-    setNewAddressForm({ street: "", city: "", state: "", zip: "", country: "India" });
+    try {
+      const userStr = localStorage.getItem("heedy_user");
+      if (!userStr) {
+        alert("Please login to save your address.");
+        setIsSavingAddress(false);
+        return;
+      }
+      
+      const { token } = JSON.parse(userStr);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      
+      const payload = {
+        street: newAddressForm.street,
+        city: newAddressForm.city,
+        state: newAddressForm.state,
+        zipCode: newAddressForm.zip,
+        country: newAddressForm.country
+      };
+
+      const res = await fetch(`${API_URL}/v1/users/addresses`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        const newAddrs = data.data;
+        const mappedAddresses = newAddrs.map((addr: any) => ({
+          id: addr._id,
+          name: addr.city?.toLowerCase() || 'Address',
+          line1: `${addr.street ? addr.street + ", " : ""}${addr.state?.toLowerCase() || ''}`,
+          line2: addr.zipCode,
+        }));
+        setAddresses(mappedAddresses);
+        if (mappedAddresses.length > 0) {
+          setSelectedAddressId(mappedAddresses[mappedAddresses.length - 1].id);
+        }
+        setIsAddressModalOpen(false);
+        setNewAddressForm({ street: "", city: "", state: "", zip: "", country: "India" });
+      } else {
+        alert(data.message || "Failed to save address");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving address");
+    } finally {
+      setIsSavingAddress(false);
+    }
   };
 
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const shipping = subtotal > 0 ? (subtotal > 499 ? 0 : 50) : 0;
-  const total = subtotal + shipping;
+  const total = Math.max(0, subtotal - discountAmount) + shipping;
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) {
+      setPromoMessage({ text: "Please enter a promo code", type: "error" });
+      return;
+    }
+    setIsApplyingPromo(true);
+    setPromoMessage(null);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/v1/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: promoCode, cartTotal: subtotal })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setDiscountAmount(data.data.discountAmount);
+        setPromoMessage({ text: data.message, type: "success" });
+      } else {
+        setDiscountAmount(0);
+        setPromoMessage({ text: data.message || "Invalid promo code", type: "error" });
+      }
+    } catch (error) {
+      console.error(error);
+      setDiscountAmount(0);
+      setPromoMessage({ text: "Failed to apply promo code. Is the server running?", type: "error" });
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] pt-24 pb-16">
@@ -125,15 +230,28 @@ export default function CheckoutPage() {
                 </h2>
               </div>
               
-              <div className="flex flex-col sm:flex-row gap-4 ml-0 sm:ml-12">
-                <input
-                  type="text"
-                  placeholder="Enter gift card or discount code"
-                  className="flex-1 border border-slate-200 rounded-xl px-5 py-4 text-base focus:outline-none focus:ring-2 focus:ring-[#0A192F] bg-white placeholder:text-slate-400"
-                />
-                <button className="bg-[#111] text-white font-bold text-sm px-10 py-4 rounded-xl hover:bg-black transition-colors shrink-0">
-                  Apply
-                </button>
+              <div className="flex flex-col gap-2 ml-0 sm:ml-12">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder="Enter gift card or discount code"
+                    className="flex-1 border border-slate-200 rounded-xl px-5 py-4 text-base focus:outline-none focus:ring-2 focus:ring-[#0A192F] bg-white placeholder:text-slate-400"
+                  />
+                  <button 
+                    onClick={handleApplyPromo}
+                    disabled={isApplyingPromo}
+                    className="bg-[#111] text-white font-bold text-sm px-10 py-4 rounded-xl hover:bg-black transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? "Applying..." : "Apply"}
+                  </button>
+                </div>
+                {promoMessage && (
+                  <p className={`text-sm mt-1 font-medium ${promoMessage.type === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+                    {promoMessage.text}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -208,8 +326,14 @@ export default function CheckoutPage() {
             <div className="space-y-4 mb-6">
               <div className="flex justify-between items-center text-slate-500 font-sans text-sm">
                 <span>Subtotal</span>
-                <span className="text-slate-900">₹{subtotal}</span>
+                <span className="text-slate-900">₹{subtotal.toFixed(2)}</span>
               </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between items-center text-green-600 font-sans text-sm">
+                  <span>Discount</span>
+                  <span>-₹{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-slate-500 font-sans text-sm">
                 <span>Shipping</span>
                 <span>
@@ -226,7 +350,7 @@ export default function CheckoutPage() {
 
             <div className="flex justify-between items-end mb-8">
               <span className="font-sans font-bold text-lg text-slate-900">Total</span>
-              <span className="font-sans font-black text-2xl text-slate-900">₹{total}</span>
+              <span className="font-sans font-black text-2xl text-slate-900">₹{total.toFixed(2)}</span>
             </div>
 
             <button className="w-full bg-[#111] text-white font-bold text-base py-4 sm:py-5 rounded-xl hover:bg-black transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 mb-4">
@@ -326,9 +450,10 @@ export default function CheckoutPage() {
 
               <button 
                 onClick={handleSaveAddress}
-                className="w-full bg-[#111] text-white font-bold text-base py-4 rounded-xl mt-4 hover:bg-black transition-colors focus:outline-none"
+                disabled={isSavingAddress}
+                className="w-full bg-[#111] text-white font-bold text-base py-4 rounded-xl mt-4 hover:bg-black transition-colors focus:outline-none disabled:opacity-50"
               >
-                Save & Deliver Here
+                {isSavingAddress ? "Saving..." : "Save & Deliver Here"}
               </button>
             </div>
           </div>
