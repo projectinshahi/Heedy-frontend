@@ -99,6 +99,7 @@ export default function Footer() {
                   src="/logo.jpg"
                   alt="HEEDY Logo"
                   fill
+                  sizes="(max-width: 640px) 208px, 208px"
                   className="object-contain object-left"
                 />
               </div>
