@@ -6,9 +6,11 @@ import Link from "next/link";
 import axios from "axios";
 import { Check, CreditCard, ShieldCheck, MapPin, X } from "lucide-react";
 import { useCart } from "../../context/CartContext";
+import { useToast } from "../../context/ToastContext";
 
 export default function CheckoutPage() {
   const { cartItems, clearCart } = useCart();
+  const { showToast } = useToast();
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
@@ -66,7 +68,7 @@ export default function CheckoutPage() {
     try {
       const userStr = localStorage.getItem("heedy_user");
       if (!userStr) {
-        alert("Please login to save your address.");
+        showToast("Please login to save your address.", "warning");
         setIsSavingAddress(false);
         return;
       }
@@ -105,11 +107,11 @@ export default function CheckoutPage() {
         setIsAddressModalOpen(false);
         setNewAddressForm({ street: "", city: "", state: "", zip: "", country: "India" });
       } else {
-        alert(res.data.message || "Failed to save address");
+        showToast(res.data.message || "Failed to save address", "error");
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.message || "Error saving address");
+      showToast(err.response?.data?.message || "Error saving address", "error");
     } finally {
       setIsSavingAddress(false);
     }
@@ -159,19 +161,19 @@ export default function CheckoutPage() {
 
   const handleCheckout = async () => {
     if (!selectedAddressId) {
-      alert("Please select a shipping address.");
+      showToast("Please select a shipping address.", "warning");
       return;
     }
     
     if (cartItems.length === 0) {
-      alert("Your cart is empty.");
+      showToast("Your cart is empty.", "warning");
       return;
     }
 
     try {
       const userStr = localStorage.getItem("heedy_user");
       if (!userStr) {
-        alert("Please login to proceed.");
+        showToast("Please login to proceed.", "warning");
         return;
       }
       const { token } = JSON.parse(userStr);
@@ -204,14 +206,14 @@ export default function CheckoutPage() {
       });
 
       if (!createOrderRes.data.success) {
-        alert("Failed to create order.");
+        showToast("Failed to create order.", "error");
         return;
       }
 
       const { razorpayOrder, isMock } = createOrderRes.data.data;
 
       if (isMock) {
-        alert("Mock Payment (No Razorpay API Key Found). Simulating success...");
+        showToast("Processing payment...", "info");
         const verifyRes = await axios.post(`${API_URL}/v1/payments/verify`, {
           razorpay_order_id: razorpayOrder.id,
           razorpay_payment_id: "mock_payment",
@@ -228,18 +230,18 @@ export default function CheckoutPage() {
         });
         
         if (verifyRes.data.success) {
-          alert("Mock Payment successful!");
+          showToast("Payment successful! Order placed.", "success");
           clearCart();
           window.location.href = "/profile";
         } else {
-          alert("Mock Payment verification failed.");
+          showToast("Payment verification failed.", "error");
         }
         return;
       }
 
       const isLoaded = await loadRazorpayScript();
       if (!isLoaded) {
-        alert("Razorpay SDK failed to load. Are you online?");
+        showToast("Razorpay SDK failed to load. Are you online?", "error");
         return;
       }
 
@@ -269,16 +271,16 @@ export default function CheckoutPage() {
             });
 
             if (verifyRes.data.success) {
-              alert("Payment successful!");
+              showToast("Payment successful! Order placed.", "success");
               clearCart();
               // Redirect to profile or orders page
               window.location.href = "/profile"; 
             } else {
-              alert("Payment verification failed.");
+              showToast("Payment verification failed.", "error");
             }
           } catch (err) {
             console.error(err);
-            alert("Payment verification failed.");
+            showToast("Payment verification failed.", "error");
           }
         },
         prefill: {
@@ -293,13 +295,13 @@ export default function CheckoutPage() {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (response: any){
-        alert("Payment Failed: " + response.error.description);
+        showToast("Payment Failed: " + response.error.description, "error");
       });
       rzp.open();
 
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.message || "An error occurred during checkout.");
+      showToast(err.response?.data?.message || "An error occurred during checkout.", "error");
     }
   };
 
