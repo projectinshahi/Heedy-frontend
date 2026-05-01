@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import axios from "axios";
 import { Check, CreditCard, ShieldCheck, MapPin, X } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 
 export default function CheckoutPage() {
-  const { cartItems } = useCart();
+  const { cartItems, clearCart } = useCart();
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
@@ -34,13 +35,13 @@ export default function CheckoutPage() {
         const { token } = JSON.parse(userStr);
         if (!token) return;
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-        const res = await fetch(`${API_URL}/v1/users/addresses`, {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "") : 'http://localhost:5000';
+        const API_URL = `${baseUrl}/api`;
+        const res = await axios.get(`${API_URL}/v1/users/addresses`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const data = await res.json();
-        if (data.success && data.data) {
-          const mappedAddresses = data.data.map((addr: any) => ({
+        if (res.data.success && res.data.data) {
+          const mappedAddresses = res.data.data.map((addr: any) => ({
             id: addr._id,
             name: addr.city?.toLowerCase() || 'Address',
             line1: `${addr.street ? addr.street + ", " : ""}${addr.state?.toLowerCase() || ''}`,
@@ -71,7 +72,8 @@ export default function CheckoutPage() {
       }
       
       const { token } = JSON.parse(userStr);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "") : 'http://localhost:5000';
+      const API_URL = `${baseUrl}/api`;
       
       const payload = {
         street: newAddressForm.street,
@@ -81,18 +83,15 @@ export default function CheckoutPage() {
         country: newAddressForm.country
       };
 
-      const res = await fetch(`${API_URL}/v1/users/addresses`, {
-        method: 'POST',
+      const res = await axios.post(`${API_URL}/v1/users/addresses`, payload, {
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify(payload)
+        }
       });
       
-      const data = await res.json();
-      if (data.success) {
-        const newAddrs = data.data;
+      if (res.data.success) {
+        const newAddrs = res.data.data;
         const mappedAddresses = newAddrs.map((addr: any) => ({
           id: addr._id,
           name: addr.city?.toLowerCase() || 'Address',
@@ -106,11 +105,11 @@ export default function CheckoutPage() {
         setIsAddressModalOpen(false);
         setNewAddressForm({ street: "", city: "", state: "", zip: "", country: "India" });
       } else {
-        alert(data.message || "Failed to save address");
+        alert(res.data.message || "Failed to save address");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Error saving address");
+      alert(err.response?.data?.message || "Error saving address");
     } finally {
       setIsSavingAddress(false);
     }
@@ -128,26 +127,179 @@ export default function CheckoutPage() {
     setIsApplyingPromo(true);
     setPromoMessage(null);
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/v1/coupons/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: promoCode, cartTotal: subtotal })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setDiscountAmount(data.data.discountAmount);
-        setPromoMessage({ text: data.message, type: "success" });
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "") : 'http://localhost:5000';
+      const API_URL = `${baseUrl}/api`;
+      const response = await axios.post(`${API_URL}/v1/coupons/validate`, { code: promoCode, cartTotal: subtotal });
+      
+      if (response.data.success) {
+        setDiscountAmount(response.data.data.discountAmount);
+        setPromoMessage({ text: response.data.message, type: "success" });
       } else {
         setDiscountAmount(0);
-        setPromoMessage({ text: data.message || "Invalid promo code", type: "error" });
+        setPromoMessage({ text: response.data.message || "Invalid promo code", type: "error" });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       setDiscountAmount(0);
-      setPromoMessage({ text: "Failed to apply promo code. Is the server running?", type: "error" });
+      setPromoMessage({ text: error.response?.data?.message || "Failed to apply promo code.", type: "error" });
     } finally {
       setIsApplyingPromo(false);
+    }
+  };
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleCheckout = async () => {
+    if (!selectedAddressId) {
+      alert("Please select a shipping address.");
+      return;
+    }
+    
+    if (cartItems.length === 0) {
+      alert("Your cart is empty.");
+      return;
+    }
+
+    try {
+      const userStr = localStorage.getItem("heedy_user");
+      if (!userStr) {
+        alert("Please login to proceed.");
+        return;
+      }
+      const { token } = JSON.parse(userStr);
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "") : 'http://localhost:5000';
+      const API_URL = `${baseUrl}/api`;
+      
+      const selectedAddress = addresses.find(a => a.id === selectedAddressId);
+
+      // Format items for backend
+      const orderItems = cartItems.map(item => ({
+        product: item.id,
+        quantity: item.quantity,
+        price: item.price
+      }));
+
+      const orderShippingAddress = {
+        street: selectedAddress?.line1.split(", ")[0] || '',
+        city: selectedAddress?.name || '',
+        state: selectedAddress?.line1.split(", ")[1] || '',
+        zipCode: selectedAddress?.line2 || '',
+        country: "India"
+      };
+
+      // Call backend to create Razorpay order only (no DB save yet)
+      const createOrderRes = await axios.post(`${API_URL}/v1/payments/create-order`, {
+        total
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!createOrderRes.data.success) {
+        alert("Failed to create order.");
+        return;
+      }
+
+      const { razorpayOrder, isMock } = createOrderRes.data.data;
+
+      if (isMock) {
+        alert("Mock Payment (No Razorpay API Key Found). Simulating success...");
+        const verifyRes = await axios.post(`${API_URL}/v1/payments/verify`, {
+          razorpay_order_id: razorpayOrder.id,
+          razorpay_payment_id: "mock_payment",
+          razorpay_signature: "mock_signature",
+          // Pass order details so backend saves to DB
+          items: orderItems,
+          shippingAddress: orderShippingAddress,
+          subtotal,
+          discount: discountAmount,
+          shippingFee: shipping,
+          total,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (verifyRes.data.success) {
+          alert("Mock Payment successful!");
+          clearCart();
+          window.location.href = "/profile";
+        } else {
+          alert("Mock Payment verification failed.");
+        }
+        return;
+      }
+
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        alert("Razorpay SDK failed to load. Are you online?");
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_YourTestKey", // Replace with actual Key ID in env
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: "Heedy",
+        description: "Order Payment",
+        order_id: razorpayOrder.id,
+        handler: async function (response: any) {
+          try {
+            // Verify payment
+            const verifyRes = await axios.post(`${API_URL}/v1/payments/verify`, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              // Pass order details so backend saves to DB
+              items: orderItems,
+              shippingAddress: orderShippingAddress,
+              subtotal,
+              discount: discountAmount,
+              shippingFee: shipping,
+              total,
+            }, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (verifyRes.data.success) {
+              alert("Payment successful!");
+              clearCart();
+              // Redirect to profile or orders page
+              window.location.href = "/profile"; 
+            } else {
+              alert("Payment verification failed.");
+            }
+          } catch (err) {
+            console.error(err);
+            alert("Payment verification failed.");
+          }
+        },
+        prefill: {
+          name: "Customer",
+          email: "customer@example.com",
+          contact: "9999999999"
+        },
+        theme: {
+          color: "#0A192F"
+        }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any){
+        alert("Payment Failed: " + response.error.description);
+      });
+      rzp.open();
+
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || "An error occurred during checkout.");
     }
   };
 
@@ -353,7 +505,10 @@ export default function CheckoutPage() {
               <span className="font-sans font-black text-2xl text-slate-900">₹{total.toFixed(2)}</span>
             </div>
 
-            <button className="w-full bg-[#111] text-white font-bold text-base py-4 sm:py-5 rounded-xl hover:bg-black transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 mb-4">
+            <button 
+              onClick={handleCheckout}
+              className="w-full bg-[#111] text-white font-bold text-base py-4 sm:py-5 rounded-xl hover:bg-black transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 mb-4"
+            >
               Secure Checkout
             </button>
             
