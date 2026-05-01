@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { User, Package, MapPin, LogOut, X } from "lucide-react";
+import { useToast } from "../../context/ToastContext";
 
 interface UserProfile {
   name: string;
@@ -14,6 +15,7 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "orders" | "addresses">("overview");
@@ -21,6 +23,7 @@ export default function ProfilePage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [newAddressForm, setNewAddressForm] = useState({
     street: "",
     city: "",
@@ -108,13 +111,31 @@ export default function ProfilePage() {
         setIsAddressModalOpen(false);
         setNewAddressForm({ street: "", city: "", state: "", zip: "", country: "India" });
       } else {
-        alert(res.data.message || "Failed to save address");
+        showToast(res.data.message || "Failed to save address", "error");
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.message || "Error saving address");
+      showToast(err.response?.data?.message || "Error saving address", "error");
     } finally {
       setIsSavingAddress(false);
+    }
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    try {
+      if (!user?.token) return;
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "") : 'http://localhost:5000';
+      const API_URL = `${baseUrl}/api`;
+
+      const res = await axios.delete(`${API_URL}/v1/users/addresses/${addressId}`, {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      if (res.data.success) {
+        setAddresses(res.data.data);
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.response?.data?.message || "Error removing address", "error");
     }
   };
 
@@ -360,7 +381,12 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex items-center gap-6">
                         <button className="text-blue-600 text-sm font-bold hover:underline">Edit Details</button>
-                        <button className="text-red-500 text-sm font-bold hover:underline">Remove</button>
+                        <button 
+                          onClick={() => setDeleteConfirmId(addr._id)}
+                          className="text-red-500 text-sm font-bold hover:underline"
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -462,6 +488,40 @@ export default function ProfilePage() {
                 className="w-full bg-blue-600 text-white font-bold text-base py-4 rounded-xl mt-4 hover:bg-blue-700 transition-colors focus:outline-none disabled:opacity-50"
               >
                 {isSavingAddress ? "Saving..." : "Save Address"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Address Confirmation Modal ── */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setDeleteConfirmId(null)}
+          />
+          <div className="relative bg-white rounded-[2rem] w-full max-w-sm shadow-xl p-8 text-center">
+            <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </div>
+            <h3 className="font-bold text-xl text-slate-900 mb-2">Remove Address?</h3>
+            <p className="text-sm text-slate-500 mb-8">This address will be permanently removed from your saved locations.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleDeleteAddress(deleteConfirmId);
+                  setDeleteConfirmId(null);
+                }}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors"
+              >
+                Remove
               </button>
             </div>
           </div>
