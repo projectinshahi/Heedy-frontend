@@ -7,6 +7,9 @@ import { ChevronLeft } from "lucide-react";
 export default function PrivacyPolicyPage() {
   const [heroVisible, setHeroVisible] = useState(false);
 
+
+
+
   useEffect(() => {
     const t = setTimeout(() => setHeroVisible(true), 80);
     return () => clearTimeout(t);
