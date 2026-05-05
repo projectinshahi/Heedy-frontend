@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { User, Package, MapPin, LogOut, X } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
+import { useCart } from "../../context/CartContext";
 
 interface UserProfile {
   name: string;
@@ -16,6 +17,7 @@ interface UserProfile {
 export default function ProfilePage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { clearCart } = useCart();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "orders" | "addresses">("overview");
@@ -154,6 +156,8 @@ export default function ProfilePage() {
 
   const handleSignOut = () => {
     localStorage.removeItem("heedy_user");
+    localStorage.removeItem("heedy_cart");
+    clearCart();
     // Also might want to call backend logout to clear HTTP-only cookie if there's an endpoint
     // For now, clear local state and redirect
     router.push("/sign-in");
@@ -314,8 +318,12 @@ export default function ProfilePage() {
                 
                 {orders.length > 0 ? (
                   <div className="flex flex-col gap-6">
-                    {orders.map((order) => (
-                      <div key={order._id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    {[...orders].sort((a, b) => {
+                      if (a.orderStatus === 'delivered' && b.orderStatus !== 'delivered') return 1;
+                      if (a.orderStatus !== 'delivered' && b.orderStatus === 'delivered') return -1;
+                      return 0;
+                    }).map((order) => (
+                      <div key={order._id} className={`bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden ${order.orderStatus === 'delivered' ? 'opacity-80' : ''}`}>
                         <div className="bg-slate-50 border-b border-slate-100 p-6 sm:px-8 flex flex-wrap items-center justify-between gap-4">
                           <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Order Placed</p>
@@ -345,7 +353,7 @@ export default function ProfilePage() {
                               <div key={idx} className="flex items-center gap-4 border-b border-slate-100 pb-4 last:border-0 last:pb-0">
                                 <div className="w-16 h-16 rounded-xl bg-slate-100 shrink-0 overflow-hidden">
                                   {item.product?.images?.[0] ? (
-                                    <img src={item.product.images[0]} alt={item.product?.name} className="w-full h-full object-cover" />
+                                    <img src={item.product.images[0]} alt={item.product?.name} className={`w-full h-full object-cover ${order.orderStatus === 'delivered' ? 'grayscale' : ''}`} />
                                   ) : (
                                     <div className="w-full h-full bg-slate-200" />
                                   )}

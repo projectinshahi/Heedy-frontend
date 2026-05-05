@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useCallback, useMemo, useRef } from "rea
 import Image from "next/image";
 import Link from "next/link";
 import axios from "axios";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useCart } from "../../context/CartContext";
 import { Star, StarHalf, SlidersHorizontal, X, ChevronLeft } from "lucide-react";
 
@@ -56,9 +56,17 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   const [isAdded, setIsAdded] = useState(false);
   const { addToCart } = useCart();
 
+  const router = useRouter();
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     if (product.totalStock === 0) return;
+
+    const savedUser = localStorage.getItem("heedy_user");
+    if (!savedUser) {
+      router.push("/sign-in");
+      return;
+    }
     addToCart({
       id: product.id,
       name: product.name,

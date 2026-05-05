@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Star, StarHalf, ShoppingBag, Heart, ChevronRight,
   Shield, Truck, RotateCcw, Plus, Minus, Check,
@@ -54,6 +54,7 @@ const renderStars = (rating: number) =>
 
 export default function ProductDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -135,6 +136,12 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = () => {
     if (!product || currentStock === 0) return;
+
+    const savedUser = localStorage.getItem("heedy_user");
+    if (!savedUser) {
+      router.push("/sign-in");
+      return;
+    }
 
     addToCart({
       id: product.id,
@@ -325,10 +332,10 @@ export default function ProductDetailPage() {
                         onClick={() => handleSizeChange(i)}
                         disabled={sizeStock === 0}
                         className={`px-5 py-2.5 rounded-xl font-sans font-semibold text-sm border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 relative ${sizeStock === 0
-                            ? "border-slate-100 text-slate-300 cursor-not-allowed bg-slate-50"
-                            : i === selectedSize
-                              ? "border-slate-900 bg-slate-900 text-white"
-                              : "border-slate-200 text-slate-600 hover:border-slate-400 bg-white"
+                          ? "border-slate-100 text-slate-300 cursor-not-allowed bg-slate-50"
+                          : i === selectedSize
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 text-slate-600 hover:border-slate-400 bg-white"
                           }`}
                         aria-pressed={i === selectedSize}
                       >
@@ -385,10 +392,10 @@ export default function ProductDetailPage() {
                 disabled={currentStock === 0}
                 aria-label="Add to cart"
                 className={`flex-1 flex items-center justify-center gap-2.5 py-4 rounded-full font-bold text-sm uppercase tracking-widest transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${currentStock === 0
-                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                    : added
-                      ? "bg-green-500 text-white"
-                      : "bg-slate-900 text-white hover:bg-slate-800"
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : added
+                    ? "bg-green-500 text-white"
+                    : "bg-slate-900 text-white hover:bg-slate-800"
                   }`}
               >
                 {currentStock === 0 ? (
@@ -402,9 +409,18 @@ export default function ProductDetailPage() {
               <button
                 disabled={currentStock === 0}
                 aria-label="Buy now"
+                onClick={() => {
+                  const savedUser = localStorage.getItem("heedy_user");
+                  if (!savedUser) {
+                    router.push("/sign-in");
+                    return;
+                  }
+                  handleAddToCart();
+                  router.push("/checkout");
+                }}
                 className={`flex-1 flex items-center justify-center gap-2.5 py-4 rounded-full border-2 font-bold text-sm uppercase tracking-widest transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${currentStock === 0
-                    ? "border-slate-200 text-slate-300 cursor-not-allowed"
-                    : "border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white"
+                  ? "border-slate-200 text-slate-300 cursor-not-allowed"
+                  : "border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white"
                   }`}
               >
                 Buy Now
