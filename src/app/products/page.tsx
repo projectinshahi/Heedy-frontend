@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useCallback, useMemo, useRef } from "rea
 import Image from "next/image";
 import Link from "next/link";
 import axios from "axios";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useCart } from "../../context/CartContext";
 import { Star, StarHalf, SlidersHorizontal, X, ChevronLeft } from "lucide-react";
 
@@ -56,9 +56,17 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   const [isAdded, setIsAdded] = useState(false);
   const { addToCart } = useCart();
 
+  const router = useRouter();
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     if (product.totalStock === 0) return;
+
+    const savedUser = localStorage.getItem("heedy_user");
+    if (!savedUser) {
+      router.push("/sign-in");
+      return;
+    }
     addToCart({
       id: product.id,
       name: product.name,
@@ -131,13 +139,12 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
           onClick={handleAddToCart}
           disabled={product.totalStock === 0}
           aria-label={product.totalStock === 0 ? `Out of stock for ${product.name}` : `Add ${product.name} to cart`}
-          className={`w-full text-white font-bold text-[10px] md:text-xs uppercase tracking-widest py-2 md:py-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 motion-reduce:transition-none ${
-            product.totalStock === 0 
-              ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
-              : isAdded 
-              ? "bg-green-600 hover:bg-green-700" 
-              : "bg-slate-900 hover:bg-slate-800"
-          }`}
+          className={`w-full text-white font-bold text-[10px] md:text-xs uppercase tracking-widest py-2 md:py-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 motion-reduce:transition-none ${product.totalStock === 0
+              ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+              : isAdded
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-slate-900 hover:bg-slate-800"
+            }`}
         >
           {product.totalStock === 0 ? "OUT OF STOCK" : isAdded ? "ADDED TO CART" : "ADD TO CART"}
         </button>
@@ -374,7 +381,7 @@ function ProductsContent() {
   const [pendingMax, setPendingMax] = useState(PRICE_MAX);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 6;
+  const ITEMS_PER_PAGE = 8;
 
   useEffect(() => {
     const fetchProducts = async () => {

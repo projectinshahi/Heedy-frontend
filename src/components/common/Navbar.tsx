@@ -15,7 +15,7 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { cartCount } = useCart();
+  const { cartCount, clearCart } = useCart();
   const pathname = usePathname();
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -76,7 +76,9 @@ export default function Navbar() {
 
   const handleLogout = () => {
     localStorage.removeItem("heedy_user");
+    localStorage.removeItem("heedy_cart");
     setIsLoggedIn(false);
+    clearCart();
     router.push("/sign-in");
   };
 

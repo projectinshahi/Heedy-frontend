@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { Star, StarHalf } from "lucide-react";
@@ -39,9 +40,17 @@ function ProductCard({ product, isVisible, index }: { product: Product; isVisibl
   const [isAdded, setIsAdded] = useState(false);
   const { addToCart } = useCart();
 
+  const router = useRouter();
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     if (product.totalStock === 0) return;
+    
+    const savedUser = localStorage.getItem("heedy_user");
+    if (!savedUser) {
+      router.push("/sign-in");
+      return;
+    }
     addToCart({
       id: product.id,
       name: product.name,
