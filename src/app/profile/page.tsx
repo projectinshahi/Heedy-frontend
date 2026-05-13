@@ -70,8 +70,12 @@ export default function ProfilePage() {
           if (res.data.success && res.data.data) {
             setAddresses(res.data.data);
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error("Failed to fetch addresses", err);
+          if (err.response?.status === 401) {
+            handleSignOut();
+            showToast("Session expired. Please sign in again.", "error");
+          }
         }
       };
       fetchAddresses();
@@ -88,8 +92,12 @@ export default function ProfilePage() {
           if (res.data.success) {
             setOrders(res.data.data);
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error("Failed to fetch orders", err);
+          if (err.response?.status === 401) {
+            handleSignOut();
+            showToast("Session expired. Please sign in again.", "error");
+          }
         }
       };
       fetchOrders();
